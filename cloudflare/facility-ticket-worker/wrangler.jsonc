@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "nvidia-blueprint-facility-tickets",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-06-21",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nvidia-blueprint-facility-tickets",
+      "database_id": "f5acc479-7c19-4bc2-bc01-754a67f41d0c"
+    }
+  ]
+}

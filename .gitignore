@@ -1,0 +1,64 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+!config/env.example
+!config/env.jetson.example
+.beads-credential-key
+.bead/
+.beads/
+
+# Beads / Dolt runtime files
+.dolt/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.python-version
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage_report.xml
+test_report.xml
+venv/
+.venv/
+
+# Node / frontend
+node_modules/
+frontend/webrtc_ui/node_modules/
+cloudflare/**/.wrangler/
+dist/
+build/
+
+# NVIDIA NIM / voice-agent runtime output
+audio_dumps/
+data/
+models/
+nim_cache/
+asr_cache/
+tts_cache/
+llm_cache/
+riva_quickstart_*/
+*.wav
+*.prof
+*.log
+output/
+result*
+evidence/
+
+# Local tools and editors
+.DS_Store
+.direnv/
+.agents/
+.codex/
+.claude/
+.idea/
+.vscode/
+docs/build/
+
+# Agent-local planning artifacts
+docs/superpowers/

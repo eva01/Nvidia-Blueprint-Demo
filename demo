@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./demo [voice]            Start the browser microphone voice demo.
+  ./demo smoke [flags]      Run local sovereign smoke checks against a running backend.
+  ./demo operator [flags]   Start a no-key local operator demo and run smoke checks.
+  ./demo --help             Show this help.
+
+Smoke flags:
+  --base-url URL         Local backend URL. Defaults to FACILITY_BACKEND_URL,
+                         or http://127.0.0.1:${VOICE_BACKEND_PORT:-7860}.
+  --timeout DURATION     HTTP timeout passed to facility-smoke.
+  --evidence-report PATH Write a secret-safe JSON smoke evidence report.
+
+Operator flags:
+  --dry-run              Print the local operator plan without starting services.
+  --host HOST            Backend host. Defaults to 127.0.0.1.
+  --port PORT            Backend port. Defaults to VOICE_BACKEND_PORT, or 7860.
+  --db-path PATH         SQLite ticket DB path. Defaults under TMPDIR, or /tmp.
+  --evidence-report PATH Write a secret-safe JSON smoke evidence report.
+  --timeout DURATION     HTTP timeout passed to facility-smoke.
+
+Environment:
+  FACILITY_BACKEND_URL  Override the local backend URL for smoke checks.
+  VOICE_BACKEND_PORT    Backend port used by the browser voice demo.
+  VOICE_UI_PORT         UI port used by the browser voice demo.
+USAGE
+}
+
+run_voice_demo() {
+  exec "${DEMO_RUN_CLOUD_SCRIPT:-scripts/run_cloud_demo.sh}" "$@"
+}
+
+has_base_url_flag() {
+  for arg in "$@"; do
+    case "${arg}" in
+      --base-url|--base-url=*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+OPERATOR_BACKEND_PID=""
+OPERATOR_AUTO_DB_PATH=false
+OPERATOR_DB_PATH=""
+
+print_command() {
+  local first=true
+  for arg in "$@"; do
+    if "${first}"; then
+      first=false
+    else
+      printf ' '
+    fi
+    printf '%q' "${arg}"
+  done
+  printf '\n'
+}
+
+wait_for_docs() {
+  local docs_url="${1}"
+  local backend_pid="${2}"
+
+  for _ in {1..60}; do
+    if python3 - "${docs_url}" <<'PY'
+import sys
+import urllib.request
+
+try:
+    with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
+        if 200 <= response.status < 400:
+            raise SystemExit(0)
+except Exception:
+    pass
+
+raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+
+    if ! kill -0 "${backend_pid}" 2>/dev/null; then
+      echo "Backend exited before ${docs_url} became ready." >&2
+      return 1
+    fi
+
+    sleep 1
+  done
+
+  echo "Timed out waiting for ${docs_url}." >&2
+  return 1
+}
+
+run_operator_demo() {
+  local dry_run=false
+  local host="127.0.0.1"
+  local port="${VOICE_BACKEND_PORT:-7860}"
+  local db_path=""
+  local auto_db_path=false
+  local smoke_args=()
+
+  while (($#)); do
+    case "${1}" in
+      --dry-run)
+        dry_run=true
+        ;;
+      --host)
+        if (($# < 2)); then
+          echo "Missing value for --host." >&2
+          return 2
+        fi
+        host="${2}"
+        shift
+        ;;
+      --host=*)
+        host="${1#*=}"
+        ;;
+      --port)
+        if (($# < 2)); then
+          echo "Missing value for --port." >&2
+          return 2
+        fi
+        port="${2}"
+        shift
+        ;;
+      --port=*)
+        port="${1#*=}"
+        ;;
+      --db-path)
+        if (($# < 2)); then
+          echo "Missing value for --db-path." >&2
+          return 2
+        fi
+        db_path="${2}"
+        shift
+        ;;
+      --db-path=*)
+        db_path="${1#*=}"
+        ;;
+      --evidence-report)
+        if (($# < 2)); then
+          echo "Missing value for --evidence-report." >&2
+          return 2
+        fi
+        smoke_args+=("--evidence-report" "${2}")
+        shift
+        ;;
+      --evidence-report=*)
+        smoke_args+=("--evidence-report" "${1#*=}")
+        ;;
+      --help|-h)
+        usage
+        return 0
+        ;;
+      *)
+        smoke_args+=("${1}")
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "${db_path}" ]]; then
+    local tmp_dir="${TMPDIR:-/tmp}"
+    db_path="${tmp_dir%/}/facility-operator-demo-${port}-${BASHPID:-$$}.db"
+    auto_db_path=true
+  fi
+
+  local backend_url="http://${host}:${port}"
+  local backend_cmd=(uv run python -m src.pipeline --host "${host}" --port "${port}")
+  local smoke_cmd=(go run ./cmd/facility-smoke --base-url "${backend_url}" "${smoke_args[@]}")
+
+  export FACILITY_TICKETS_DB_PATH="${db_path}"
+  export SOVEREIGN_MODE="local-demo"
+  export DATA_RESIDENCY_REGION="local-operator"
+  export ALLOW_CLOUD_NIM="false"
+  export PII_REDACTION_ENABLED="false"
+  export AUDIT_LOG_ENABLED="true"
+
+  echo "Operator backend: ${backend_url}"
+  echo "Sovereignty: ${backend_url}/facility/sovereignty"
+  echo "Summary: ${backend_url}/facility/summary"
+  echo "Tickets: ${backend_url}/facility/tickets"
+  echo "Audit: ${backend_url}/facility/audit"
+  echo "SQLite DB: ${FACILITY_TICKETS_DB_PATH}"
+  echo "FACILITY_TICKETS_DB_PATH=${FACILITY_TICKETS_DB_PATH}"
+  echo "SOVEREIGN_MODE=${SOVEREIGN_MODE}"
+  echo "DATA_RESIDENCY_REGION=${DATA_RESIDENCY_REGION}"
+  echo "ALLOW_CLOUD_NIM=${ALLOW_CLOUD_NIM}"
+  echo "PII_REDACTION_ENABLED=${PII_REDACTION_ENABLED}"
+  echo "AUDIT_LOG_ENABLED=${AUDIT_LOG_ENABLED}"
+  printf 'Backend command: '
+  print_command "${backend_cmd[@]}"
+  printf 'Smoke command: '
+  print_command "${smoke_cmd[@]}"
+
+  if "${dry_run}"; then
+    return 0
+  fi
+
+  "${backend_cmd[@]}" &
+  OPERATOR_BACKEND_PID=$!
+  OPERATOR_AUTO_DB_PATH="${auto_db_path}"
+  OPERATOR_DB_PATH="${db_path}"
+
+  cleanup_backend() {
+    if [[ -n "${OPERATOR_BACKEND_PID:-}" ]] && kill -0 "${OPERATOR_BACKEND_PID}" 2>/dev/null; then
+      kill "${OPERATOR_BACKEND_PID}" 2>/dev/null || true
+      wait "${OPERATOR_BACKEND_PID}" 2>/dev/null || true
+    fi
+    if "${OPERATOR_AUTO_DB_PATH:-false}" && [[ -n "${OPERATOR_DB_PATH:-}" ]]; then
+      rm -f "${OPERATOR_DB_PATH}" "${OPERATOR_DB_PATH}-shm" "${OPERATOR_DB_PATH}-wal" 2>/dev/null || true
+    fi
+  }
+  trap cleanup_backend EXIT INT TERM
+
+  local smoke_status=0
+  wait_for_docs "${backend_url}/docs" "${OPERATOR_BACKEND_PID}" || smoke_status=$?
+  if [[ "${smoke_status}" -eq 0 ]]; then
+    "${smoke_cmd[@]}" || smoke_status=$?
+  fi
+  cleanup_backend
+  trap - EXIT INT TERM
+  return "${smoke_status}"
+}
+
+command="${1:-voice}"
+case "${command}" in
+  voice)
+    shift || true
+    run_voice_demo "$@"
+    ;;
+  smoke)
+    shift || true
+    if has_base_url_flag "$@"; then
+      exec go run ./cmd/facility-smoke "$@"
+    fi
+    backend_url="${FACILITY_BACKEND_URL:-http://127.0.0.1:${VOICE_BACKEND_PORT:-7860}}"
+    exec go run ./cmd/facility-smoke --base-url "${backend_url}" "$@"
+    ;;
+  operator)
+    shift || true
+    run_operator_demo "$@"
+    ;;
+  --help|-h|help)
+    usage
+    ;;
+  *)
+    run_voice_demo "$@"
+    ;;
+esac

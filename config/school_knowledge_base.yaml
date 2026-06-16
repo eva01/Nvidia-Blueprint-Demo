@@ -1,0 +1,36 @@
+documents:
+  - id: visitor-policy
+    title: Visitor policy
+    tags: [security, front-office]
+    content: >
+      Visitors must register at the main office, wear a visitor badge, and remain with school staff while on campus.
+  - id: water-electricity
+    title: Water near electricity
+    tags: [safety, facilities, urgent]
+    content: >
+      Water near electrical outlets, switchboards, servers, or powered equipment is urgent. Keep students away,
+      isolate the area if safe, and notify facilities immediately.
+  - id: after-hours-access
+    title: After-hours access
+    tags: [security, access]
+    content: >
+      Students are not allowed in classrooms after 6 PM without a staff member. Staff must sign in with security
+      before entering teaching blocks after hours.
+  - id: air-conditioning
+    title: Air conditioning issues
+    tags: [hvac, facilities]
+    content: >
+      Air conditioning faults should include the room name, whether cooling has stopped completely, and whether
+      there is water leakage or electrical risk.
+  - id: it-support
+    title: IT classroom support
+    tags: [it, classroom]
+    content: >
+      Classroom IT problems should include the room, device type, visible error, and whether teaching is blocked.
+      Network-wide outages should be marked urgent.
+  - id: cleaning-spill
+    title: Spill response
+    tags: [cleaning, safety]
+    content: >
+      Food or drink spills in corridors, stairs, cafeterias, or labs should be reported with location and slip risk.
+      Block the area if students may walk through it.

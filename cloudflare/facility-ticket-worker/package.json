@@ -1,0 +1,13 @@
+{
+  "name": "facility-ticket-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "check": "wrangler deploy --config wrangler.jsonc --dry-run",
+    "migrate:local": "wrangler d1 migrations apply nvidia-blueprint-facility-tickets --local --config wrangler.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply nvidia-blueprint-facility-tickets --remote --config wrangler.jsonc"
+  }
+}
